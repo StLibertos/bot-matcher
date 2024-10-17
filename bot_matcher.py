@@ -57,12 +57,40 @@ def get_mbti_description(mbti_type):
     }
     return descriptions.get(mbti_type, 'N/A')
 
+# Команда для перегляду інформації про бота
+@bot.tree.command(name="info_personality_bot", description="Переглянути опис можливостей бота.")
+async def info_personality_bot(interaction: discord.Interaction):
+    info_message = (
+        "**🤖 Ось що я вмію:**\n\n"
+        "1. **/setpersonality** — Встановити свій тип особистості.\n"
+        "   - _Опис_: Ви можете обрати свій MBTI тип особистості. Якщо ви не знаєте свого типу, ви можете пройти [тест на 16 типів особистості](https://www.16personalities.com/uk).\n"
+        "   - **Приклад**: `/setpersonality`\n\n"
+        "2. **/sethobbies** — Встановити свої хобі.\n"
+        "   - _Опис_: Оберіть свої улюблені види дозвілля та захоплення.\n"
+        "   - **Приклад**: `/sethobbies`\n\n"
+        "3. **/setcommunicationstyle** — Встановити свої стилі спілкування.\n"
+        "   - _Опис_: Оберіть свої стилі спілкування.\n"
+        "   - **Приклад**: `/setcommunicationstyle`\n\n"
+        "4. **/myprofile** — Переглянути свій профіль.\n"
+        "   - _Опис_: Показує ваш поточний профіль, включаючи тип особистості, хобі та стилі спілкування.\n"
+        "   - **Приклад**: `/myprofile`\n\n"
+        "5. **/checkprofile** — Переглянути профіль іншого користувача.\n"
+        "   - _Опис_: Можливість перевірити профіль іншого користувача.\n"
+        "   - **Приклад**: `/checkprofile @username`"
+    )
+
+    await interaction.response.send_message(info_message, ephemeral=True)
+
 # Команда для встановлення типу особистості з описом
 @bot.tree.command(name="setpersonality", description="Встановіть свій тип особистості.")
 async def setpersonality(interaction: discord.Interaction):
     await interaction.response.send_message(
         "Будь ласка, оберіть свій тип особистості:",
         view=PersonalityTypeView(),
+        ephemeral=True
+    )
+    await interaction.followup.send(
+        "Якщо ви не знаєте свого типу особистості, ви можете пройти [тест на 16 типів особистості](https://www.16personalities.com/uk).",
         ephemeral=True
     )
 
@@ -230,9 +258,9 @@ async def myprofile(interaction: discord.Interaction):
     try:
         profile = get_or_create_profile(interaction.user.id)
         await interaction.response.send_message(
-            f"**Тип особистості**: {profile['personality_type']} ({get_mbti_description(profile['personality_type'])})\n"
-            f"**Хобі**: {', '.join(profile['hobbies']) if profile['hobbies'] else 'N/A'}\n"
-            f"**Стилі спілкування**: {profile['communication_styles'] if profile['communication_styles'] else 'N/A'}"
+            f"🔖 **Тип особистості**: {profile['personality_type']} ({get_mbti_description(profile['personality_type'])})\n\n"
+            f"🌱 **Хобі**: {', '.join(profile['hobbies']) if profile['hobbies'] else 'N/A'}\n\n"
+            f"💬 **Стилі спілкування**: {profile['communication_styles'] if profile['communication_styles'] else 'N/A'}"
         )
     except Exception as e:
         await interaction.response.send_message(f"Сталася помилка: {e}", ephemeral=True)
@@ -244,9 +272,9 @@ async def checkprofile(interaction: discord.Interaction, user: discord.Member):
     try:
         profile = get_or_create_profile(user.id)
         await interaction.response.send_message(
-            f"**Тип особистості**: {profile['personality_type']} ({get_mbti_description(profile['personality_type'])})\n"
-            f"**Хобі**: {', '.join(profile['hobbies']) if profile['hobbies'] else 'N/A'}\n"
-            f"**Стилі спілкування**: {profile['communication_styles'] if profile['communication_styles'] else 'N/A'}"
+            f"🔖 **Тип особистості**: {profile['personality_type']} ({get_mbti_description(profile['personality_type'])})\n\n"
+            f"🌱 **Хобі**: {', '.join(profile['hobbies']) if profile['hobbies'] else 'N/A'}\n\n"
+            f"💬 **Стилі спілкування**: {profile['communication_styles'] if profile['communication_styles'] else 'N/A'}"
         )
     except Exception as e:
         await interaction.response.send_message(f"Сталася помилка: {e}", ephemeral=True)
