@@ -1,6 +1,6 @@
-import discord # type: ignore
-from discord import app_commands # type: ignore
-from discord.ext import commands # type: ignore
+import discord  # type: ignore
+from discord import app_commands  # type: ignore
+from discord.ext import commands  # type: ignore
 import os
 import asyncio
 
@@ -77,7 +77,10 @@ async def info_personality_bot(interaction: discord.Interaction):
         "   - **Приклад**: `/myprofile`\n\n"
         "5. **/checkprofile** — Переглянути профіль іншого користувача.\n"
         "   - _Опис_: Можливість перевірити профіль іншого користувача.\n"
-        "   - **Приклад**: `/checkprofile @username`"
+        "   - **Приклад**: `/checkprofile @username`\n\n"
+        "6. **/deleteprofile** — Видалити свій профіль.\n"
+        "   - _Опис_: Видаляє ваш профіль з усіма даними.\n"
+        "   - **Приклад**: `/deleteprofile`"
     )
 
     await interaction.response.send_message(info_message, ephemeral=True)
@@ -90,7 +93,7 @@ async def myprofile(interaction: discord.Interaction):
         await interaction.response.send_message(
             f"🔖 **Тип особистості**: {profile['personality_type']} ({get_mbti_description(profile['personality_type'])})\n\n"
             f"🌱 **Хобі**: {', '.join(profile['hobbies']) if profile['hobbies'] else 'N/A'}\n\n"
-            f"💬 **Стилі спілкування**: {profile['communication_styles'] if profile['communication_styles'] else 'N/A'}",
+            f"💬 **Стилі спілкування**: {', '.join(profile['communication_styles']) if profile['communication_styles'] else 'N/A'}",
             ephemeral=True
         )
     except Exception as e:
@@ -105,17 +108,19 @@ async def checkprofile(interaction: discord.Interaction, user: discord.Member):
         await interaction.response.send_message(
             f"🔖 **Тип особистості**: {profile['personality_type']} ({get_mbti_description(profile['personality_type'])})\n\n"
             f"🌱 **Хобі**: {', '.join(profile['hobbies']) if profile['hobbies'] else 'N/A'}\n\n"
-            f"💬 **Стилі спілкування**: {profile['communication_styles'] if profile['communication_styles'] else 'N/A'}",
+            f"💬 **Стилі спілкування**: {', '.join(profile['communication_styles']) if profile['communication_styles'] else 'N/A'}",
             ephemeral=True
         )
     except Exception as e:
         await interaction.response.send_message(f"Сталася помилка: {e}", ephemeral=True)
 
-# Команда для встановлення типу особистості з описом
-@bot.tree.command(name="setpersonality", description="Встановіть свій тип особистості.")
+# Команда для встановлення типу особистості з можливістю видалення
+@bot.tree.command(name="setpersonality", description="Встановіть або змініть свій тип особистості.")
 async def setpersonality(interaction: discord.Interaction):
+    profile = get_or_create_profile(interaction.user.id)
     await interaction.response.send_message(
-        "Будь ласка, оберіть свій тип особистості:",
+        f"Ваш поточний тип особистості: {profile['personality_type']}\n\n"
+        "Будь ласка, оберіть свій тип особистості або оберіть 'Видалити тип особистості':",
         view=PersonalityTypeView(),
         ephemeral=True
     )
@@ -135,31 +140,77 @@ class PersonalityTypeView(discord.ui.View):
                 'ISTP', 'ISFP', 'ESTP', 'ESFP'
             ]
         ]
+        options.append(discord.SelectOption(label='Видалити тип особистості', description='Видалити поточний тип особистості', value='N/A'))
         self.add_item(PersonalityTypeSelect(options=options))
 
 class PersonalityTypeSelect(discord.ui.Select):
     def __init__(self, options):
-        super().__init__(placeholder="Оберіть свій MBTI тип особистості", options=options)
+        super().__init__(placeholder="Оберіть свій MBTI тип особистості або видаліть поточний", options=options)
 
     async def callback(self, interaction: discord.Interaction):
         profile = get_or_create_profile(interaction.user.id)
-        profile['personality_type'] = self.values[0]
-        description = get_mbti_description(self.values[0])
-        await interaction.response.send_message(f"🔖 Тип особистості встановлено: {self.values[0]}: {description}.", ephemeral=True)
+        selected_type = self.values[0]
+        profile['personality_type'] = selected_type
+        if selected_type == 'N/A':
+            message = "🔖 Ваш тип особистості було видалено."
+        else:
+            description = get_mbti_description(selected_type)
+            message = f"🔖 Тип особистості встановлено: {selected_type}: {description}."
+        await interaction.response.send_message(message, ephemeral=True)
 
-# Команда для встановлення хобі
-@bot.tree.command(name="sethobbies", description="Встановіть свої хобі.")
+# Команда для встановлення хобі з можливістю знімати вибір
+@bot.tree.command(name="sethobbies", description="Встановіть або оновіть свої хобі.")
 async def sethobbies(interaction: discord.Interaction):
+    profile = get_or_create_profile(interaction.user.id)
     await interaction.response.send_message(
-        "Будь ласка, оберіть категорію хобі:",
+        f"Ваші поточні хобі: {', '.join(profile['hobbies']) if profile['hobbies'] else 'немає'}\n\n"
+        "Будь ласка, оберіть категорію хобі для додавання або видалення:",
         view=HobbyCategoryView(),
         ephemeral=True
     )
     await interaction.followup.send(
-        "Натисніть кнопку для додавання власного хобі",
-        view=AddCustomHobbyView(),
+        "Натисніть кнопку для додавання власного хобі або видалення існуючих.",
+        view=ManageHobbiesView(),
         ephemeral=True
     )
+
+class ManageHobbiesView(discord.ui.View):
+    def __init__(self):
+        super().__init__()
+        self.add_item(AddCustomHobbyButton())
+        self.add_item(RemoveHobbiesButton())
+
+class RemoveHobbiesButton(discord.ui.Button):
+    def __init__(self):
+        super().__init__(label="Видалити хобі 🗑️", style=discord.ButtonStyle.danger)
+
+    async def callback(self, interaction: discord.Interaction):
+        profile = get_or_create_profile(interaction.user.id)
+        if not profile['hobbies']:
+            await interaction.response.send_message("У вас немає хобі для видалення.", ephemeral=True)
+            return
+        await interaction.response.send_message(
+            "Оберіть хобі для видалення:",
+            view=RemoveHobbiesView(profile['hobbies']),
+            ephemeral=True
+        )
+
+class RemoveHobbiesView(discord.ui.View):
+    def __init__(self, hobbies):
+        super().__init__()
+        options = [discord.SelectOption(label=hobby) for hobby in hobbies]
+        self.add_item(RemoveHobbiesSelect(options))
+
+class RemoveHobbiesSelect(discord.ui.Select):
+    def __init__(self, options):
+        super().__init__(placeholder='Оберіть хобі для видалення', options=options, min_values=1, max_values=len(options))
+
+    async def callback(self, interaction: discord.Interaction):
+        profile = get_or_create_profile(interaction.user.id)
+        for hobby in self.values:
+            if hobby in profile['hobbies']:
+                profile['hobbies'].remove(hobby)
+        await interaction.response.send_message(f"🗑️ Видалено хобі: {', '.join(self.values)}", ephemeral=True)
 
 class HobbyCategoryView(discord.ui.View):
     def __init__(self):
@@ -183,71 +234,70 @@ class HobbyCategoryButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.send_message(
             f"Ви обрали категорію: {self.category}. Виберіть хобі:",
-            view=HobbySelectView(self.category),
+            view=HobbySelectView(self.category, interaction.user.id),
             ephemeral=True
         )
 
 class HobbySelectView(discord.ui.View):
-    def __init__(self, category):
+    def __init__(self, category, user_id):
         super().__init__()
-        options = self.get_hobby_options(category)
-        self.add_item(HobbySelect(options=options))
+        options = self.get_hobby_options(category, user_id)
+        self.add_item(HobbySelect(options=options, user_id=user_id))
 
     @staticmethod
-    def get_hobby_options(category):
-        hobbies = {
+    def get_hobby_options(category, user_id):
+        hobbies_dict = {
             "Творчість і медіа": [
-                discord.SelectOption(label='Малювання'),
-                discord.SelectOption(label='Фотографія'),
-                discord.SelectOption(label='Музика (гра на інструментах)'),
-                discord.SelectOption(label='Танці'),
-                discord.SelectOption(label='Писання (блоги, поезія, проза)'),
-                discord.SelectOption(label='Відеомонтаж'),
-                discord.SelectOption(label='Графічний дизайн')
+                'Малювання', 'Фотографія', 'Музика (гра на інструментах)', 'Танці',
+                'Писання (блоги, поезія, проза)', 'Відеомонтаж', 'Графічний дизайн'
             ],
             "Активний відпочинок і спорт": [
-                discord.SelectOption(label='Біг'),
-                discord.SelectOption(label='Йога'),
-                discord.SelectOption(label='Фітнес'),
-                discord.SelectOption(label='Футбол'),
-                discord.SelectOption(label='Кемпінг та походи'),
-                discord.SelectOption(label='Екстримальні види спорту (скелелазіння)')
+                'Біг', 'Йога', 'Фітнес', 'Футбол', 'Кемпінг та походи', 'Екстримальні види спорту (скелелазіння)'
             ],
             "Технології та ігри": [
-                discord.SelectOption(label='Відеоігри'),
-                discord.SelectOption(label='Кодинг/програмування'),
-                discord.SelectOption(label='Кіберспорт'),
-                discord.SelectOption(label='Моделювання ігор')
+                'Відеоігри', 'Кодинг/програмування', 'Кіберспорт', 'Моделювання ігор'
             ],
             "Розвиток і самовдосконалення": [
-                discord.SelectOption(label='Читання книг'),
-                discord.SelectOption(label='Медитація'),
-                discord.SelectOption(label='Психологія'),
-                discord.SelectOption(label='Астрологія')
+                'Читання книг', 'Медитація', 'Психологія', 'Астрологія'
             ],
             "Домашнє дозвілля": [
-                discord.SelectOption(label='Кулінарія'),
-                discord.SelectOption(label='Садівництво'),
-                discord.SelectOption(label='DIY проекти – створення речей своїми руками (меблі, декор, одяг)'),
-                discord.SelectOption(label='Колекціонування (марки, монети)')
+                'Кулінарія', 'Садівництво', 'DIY проекти – створення речей своїми руками (меблі, декор, одяг)', 'Колекціонування (марки, монети)'
             ],
             "Подорожі та дослідження": [
-                discord.SelectOption(label='Подорожі'),
-                discord.SelectOption(label='Астрономія'),
-                discord.SelectOption(label='Історичні реконструкції'),
-                discord.SelectOption(label='Робота з тваринами')
+                'Подорожі', 'Астрономія', 'Історичні реконструкції', 'Робота з тваринами'
             ]
         }
-        return hobbies.get(category, [])
+        profile = get_or_create_profile(user_id)
+        user_hobbies = profile['hobbies']
+        options = []
+        for hobby in hobbies_dict.get(category, []):
+            options.append(discord.SelectOption(label=hobby, default=hobby in user_hobbies))
+        return options
 
 class HobbySelect(discord.ui.Select):
-    def __init__(self, options):
-        super().__init__(placeholder='Оберіть свої хобі', options=options, min_values=1, max_values=len(options))
+    def __init__(self, options, user_id):
+        super().__init__(placeholder='Оберіть свої хобі (обрані будуть додані/зняті)', options=options, min_values=0, max_values=len(options))
+        self.user_id = user_id
 
     async def callback(self, interaction: discord.Interaction):
-        profile = get_or_create_profile(interaction.user.id)
-        profile['hobbies'].extend(self.values)
-        await interaction.response.send_message(f"🌱 Хобі оновлено: {', '.join(self.values)}", ephemeral=True)
+        profile = get_or_create_profile(self.user_id)
+        selected_hobbies = set(self.values)
+        current_hobbies = set(profile['hobbies'])
+
+        new_hobbies = selected_hobbies - current_hobbies
+        removed_hobbies = current_hobbies - selected_hobbies
+
+        profile['hobbies'] = list(selected_hobbies)
+
+        message = ""
+        if new_hobbies:
+            message += f"🌱 Додано хобі: {', '.join(new_hobbies)}\n"
+        if removed_hobbies:
+            message += f"🗑️ Видалено хобі: {', '.join(removed_hobbies)}\n"
+        if not message:
+            message = "Ваші хобі залишилися без змін."
+
+        await interaction.response.send_message(message, ephemeral=True)
 
 # Додавання власного хобі
 class AddCustomHobbyView(discord.ui.View):
@@ -277,22 +327,25 @@ class AddCustomHobbyButton(discord.ui.Button):
         except asyncio.TimeoutError:
             await interaction.followup.send("⏱️ Час на введення хобі вичерпано. Спробуйте знову.", ephemeral=True)
 
-# Команда для встановлення стилів спілкування
-@bot.tree.command(name="setcommunicationstyle", description="Встановіть свої стилі спілкування.")
+# Команда для встановлення стилів спілкування з можливістю знімати вибір
+@bot.tree.command(name="setcommunicationstyle", description="Встановіть або оновіть свої стилі спілкування.")
 async def setcommunicationstyle(interaction: discord.Interaction):
+    profile = get_or_create_profile(interaction.user.id)
     await interaction.response.send_message(
-        "Будь ласка, оберіть свої стилі спілкування (можна обрати кілька варіантів):",
-        view=CommunicationStyleView(),
+        f"Ваші поточні стилі спілкування: {', '.join(profile['communication_styles']) if profile['communication_styles'] else 'немає'}\n\n"
+        "Будь ласка, оберіть свої стилі спілкування (можна знімати вибір з тих, що вже обрані):",
+        view=CommunicationStyleView(interaction.user.id),
         ephemeral=True
     )
 
 class CommunicationStyleView(discord.ui.View):
-    def __init__(self):
+    def __init__(self, user_id):
         super().__init__()
-        self.add_item(CommunicationStyleSelect())
+        self.add_item(CommunicationStyleSelect(user_id))
 
 class CommunicationStyleSelect(discord.ui.Select):
-    def __init__(self):
+    def __init__(self, user_id):
+        self.user_id = user_id
         options = [
             discord.SelectOption(label="Розмови один на один"),
             discord.SelectOption(label="Малі групові обговорення"),
@@ -306,13 +359,70 @@ class CommunicationStyleSelect(discord.ui.Select):
             discord.SelectOption(label="Глибокі, роздумисті розмови"),
             discord.SelectOption(label="Вирішення конфліктів")
         ]
+        profile = get_or_create_profile(user_id)
+        user_styles = profile['communication_styles']
+        for option in options:
+            option.default = option.label in user_styles
         super().__init__(
-            placeholder="Оберіть свої стилі спілкування", options=options, min_values=1, max_values=len(options)
+            placeholder="Оберіть свої стилі спілкування",
+            options=options,
+            min_values=0,
+            max_values=len(options)
         )
 
     async def callback(self, interaction: discord.Interaction):
-        profile = get_or_create_profile(interaction.user.id)
-        profile['communication_styles'] = ', '.join(self.values)
-        await interaction.response.send_message(f"💬 Стилі спілкування встановлено: {', '.join(self.values)}", ephemeral=True)
+        profile = get_or_create_profile(self.user_id)
+        selected_styles = set(self.values)
+        current_styles = set(profile['communication_styles'])
+
+        new_styles = selected_styles - current_styles
+        removed_styles = current_styles - selected_styles
+
+        profile['communication_styles'] = list(selected_styles)
+
+        message = ""
+        if new_styles:
+            message += f"💬 Додано стилі спілкування: {', '.join(new_styles)}\n"
+        if removed_styles:
+            message += f"🗑️ Видалено стилі спілкування: {', '.join(removed_styles)}\n"
+        if not message:
+            message = "Ваші стилі спілкування залишилися без змін."
+
+        await interaction.response.send_message(message, ephemeral=True)
+
+# Команда для видалення профілю
+@bot.tree.command(name="deleteprofile", description="Видалити свій профіль.")
+async def deleteprofile(interaction: discord.Interaction):
+    # Запит підтвердження від користувача
+    await interaction.response.send_message(
+        "Ви впевнені, що хочете видалити свій профіль? Цю дію не можна буде скасувати.",
+        view=ConfirmDeleteProfileView(),
+        ephemeral=True
+    )
+
+class ConfirmDeleteProfileView(discord.ui.View):
+    def __init__(self):
+        super().__init__()
+        self.add_item(ConfirmDeleteButton())
+        self.add_item(CancelDeleteButton())
+
+class ConfirmDeleteButton(discord.ui.Button):
+    def __init__(self):
+        super().__init__(label="✅ Так, видалити профіль", style=discord.ButtonStyle.danger)
+
+    async def callback(self, interaction: discord.Interaction):
+        user_id = interaction.user.id
+        if user_id in user_profiles:
+            del user_profiles[user_id]
+            await interaction.response.send_message("Ваш профіль було успішно видалено.", ephemeral=True)
+        else:
+            await interaction.response.send_message("У вас немає профілю для видалення.", ephemeral=True)
+
+class CancelDeleteButton(discord.ui.Button):
+    def __init__(self):
+        super().__init__(label="❌ Скасувати", style=discord.ButtonStyle.secondary)
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.send_message("Видалення профілю скасовано.", ephemeral=True)
 
 bot.run(TOKEN)
