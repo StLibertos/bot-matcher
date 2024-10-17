@@ -214,7 +214,7 @@ class HobbySelectView(discord.ui.View):
                 discord.SelectOption(label='Екстримальні види спорту (скелелазіння)')
             ],
             "Технології та ігри": [
-                discord.SelectOption(label='Ігрові відеоігри'),
+                discord.SelectOption(label='Відеоігри'),
                 discord.SelectOption(label='Кодинг/програмування'),
                 discord.SelectOption(label='Кіберспорт'),
                 discord.SelectOption(label='Моделювання ігор')
