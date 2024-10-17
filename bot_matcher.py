@@ -2,6 +2,7 @@ import discord # type: ignore
 from discord import app_commands # type: ignore
 from discord.ext import commands # type: ignore
 import os
+import asyncio
 
 TOKEN = os.getenv('DISCORD_BOT_TOKEN')
 
@@ -81,6 +82,35 @@ async def info_personality_bot(interaction: discord.Interaction):
 
     await interaction.response.send_message(info_message, ephemeral=True)
 
+# Команда для перегляду профілю користувача
+@bot.tree.command(name="myprofile", description="Переглянути свій профіль.")
+async def myprofile(interaction: discord.Interaction):
+    try:
+        profile = get_or_create_profile(interaction.user.id)
+        await interaction.response.send_message(
+            f"🔖 **Тип особистості**: {profile['personality_type']} ({get_mbti_description(profile['personality_type'])})\n\n"
+            f"🌱 **Хобі**: {', '.join(profile['hobbies']) if profile['hobbies'] else 'N/A'}\n\n"
+            f"💬 **Стилі спілкування**: {profile['communication_styles'] if profile['communication_styles'] else 'N/A'}",
+            ephemeral=True
+        )
+    except Exception as e:
+        await interaction.response.send_message(f"Сталася помилка: {e}", ephemeral=True)
+
+# Команда для перевірки профілю іншого користувача
+@bot.tree.command(name="checkprofile", description="Переглянути профіль іншого користувача.")
+@app_commands.describe(user="Користувач, чий профіль ви хочете переглянути")
+async def checkprofile(interaction: discord.Interaction, user: discord.Member):
+    try:
+        profile = get_or_create_profile(user.id)
+        await interaction.response.send_message(
+            f"🔖 **Тип особистості**: {profile['personality_type']} ({get_mbti_description(profile['personality_type'])})\n\n"
+            f"🌱 **Хобі**: {', '.join(profile['hobbies']) if profile['hobbies'] else 'N/A'}\n\n"
+            f"💬 **Стилі спілкування**: {profile['communication_styles'] if profile['communication_styles'] else 'N/A'}",
+            ephemeral=True
+        )
+    except Exception as e:
+        await interaction.response.send_message(f"Сталася помилка: {e}", ephemeral=True)
+
 # Команда для встановлення типу особистості з описом
 @bot.tree.command(name="setpersonality", description="Встановіть свій тип особистості.")
 async def setpersonality(interaction: discord.Interaction):
@@ -115,7 +145,7 @@ class PersonalityTypeSelect(discord.ui.Select):
         profile = get_or_create_profile(interaction.user.id)
         profile['personality_type'] = self.values[0]
         description = get_mbti_description(self.values[0])
-        await interaction.response.send_message(f"Тип особистості встановлено: {self.values[0]}: {description}.", ephemeral=True)
+        await interaction.response.send_message(f"🔖 Тип особистості встановлено: {self.values[0]}: {description}.", ephemeral=True)
 
 # Команда для встановлення хобі
 @bot.tree.command(name="sethobbies", description="Встановіть свої хобі.")
@@ -123,6 +153,11 @@ async def sethobbies(interaction: discord.Interaction):
     await interaction.response.send_message(
         "Будь ласка, оберіть категорію хобі:",
         view=HobbyCategoryView(),
+        ephemeral=True
+    )
+    await interaction.followup.send(
+        "Натисніть кнопку для додавання власного хобі",
+        view=AddCustomHobbyView(),
         ephemeral=True
     )
 
@@ -212,7 +247,35 @@ class HobbySelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         profile = get_or_create_profile(interaction.user.id)
         profile['hobbies'].extend(self.values)
-        await interaction.response.send_message(f"Хобі оновлено: {', '.join(self.values)}", ephemeral=True)
+        await interaction.response.send_message(f"🌱 Хобі оновлено: {', '.join(self.values)}", ephemeral=True)
+
+# Додавання власного хобі
+class AddCustomHobbyView(discord.ui.View):
+    def __init__(self):
+        super().__init__()
+        self.add_item(AddCustomHobbyButton())
+
+class AddCustomHobbyButton(discord.ui.Button):
+    def __init__(self):
+        super().__init__(label="Додати власне хобі ✏️", style=discord.ButtonStyle.success)
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.send_message(
+            "Введіть свої хобі через кому:",
+            ephemeral=True
+        )
+
+        def check(m):
+            return m.author.id == interaction.user.id and m.channel.id == interaction.channel.id
+
+        try:
+            message = await bot.wait_for('message', check=check, timeout=60.0)
+            hobbies = [hobby.strip() for hobby in message.content.split(',')]
+            profile = get_or_create_profile(interaction.user.id)
+            profile['hobbies'].extend(hobbies)
+            await interaction.followup.send(f"🌱 Додано хобі: {', '.join(hobbies)}", ephemeral=True)
+        except asyncio.TimeoutError:
+            await interaction.followup.send("⏱️ Час на введення хобі вичерпано. Спробуйте знову.", ephemeral=True)
 
 # Команда для встановлення стилів спілкування
 @bot.tree.command(name="setcommunicationstyle", description="Встановіть свої стилі спілкування.")
@@ -250,33 +313,6 @@ class CommunicationStyleSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         profile = get_or_create_profile(interaction.user.id)
         profile['communication_styles'] = ', '.join(self.values)
-        await interaction.response.send_message(f"Стилі спілкування встановлено: {', '.join(self.values)}", ephemeral=True)
-
-# Команда для перегляду профілю користувача
-@bot.tree.command(name="myprofile", description="Переглянути свій профіль.")
-async def myprofile(interaction: discord.Interaction):
-    try:
-        profile = get_or_create_profile(interaction.user.id)
-        await interaction.response.send_message(
-            f"🔖 **Тип особистості**: {profile['personality_type']} ({get_mbti_description(profile['personality_type'])})\n\n"
-            f"🌱 **Хобі**: {', '.join(profile['hobbies']) if profile['hobbies'] else 'N/A'}\n\n"
-            f"💬 **Стилі спілкування**: {profile['communication_styles'] if profile['communication_styles'] else 'N/A'}"
-        )
-    except Exception as e:
-        await interaction.response.send_message(f"Сталася помилка: {e}", ephemeral=True)
-
-# Команда для перевірки профілю іншого користувача
-@bot.tree.command(name="checkprofile", description="Переглянути профіль іншого користувача.")
-@app_commands.describe(user="Користувач, чий профіль ви хочете переглянути")
-async def checkprofile(interaction: discord.Interaction, user: discord.Member):
-    try:
-        profile = get_or_create_profile(user.id)
-        await interaction.response.send_message(
-            f"🔖 **Тип особистості**: {profile['personality_type']} ({get_mbti_description(profile['personality_type'])})\n\n"
-            f"🌱 **Хобі**: {', '.join(profile['hobbies']) if profile['hobbies'] else 'N/A'}\n\n"
-            f"💬 **Стилі спілкування**: {profile['communication_styles'] if profile['communication_styles'] else 'N/A'}"
-        )
-    except Exception as e:
-        await interaction.response.send_message(f"Сталася помилка: {e}", ephemeral=True)
+        await interaction.response.send_message(f"💬 Стилі спілкування встановлено: {', '.join(self.values)}", ephemeral=True)
 
 bot.run(TOKEN)
