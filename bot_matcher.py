@@ -165,8 +165,8 @@ async def sethobbies(interaction: discord.Interaction):
     await interaction.response.send_message(
         f"Ваші поточні хобі: {', '.join(profile['hobbies']) if profile['hobbies'] else 'немає'}\n\n"
         "Будь ласка, оберіть категорію хобі для додавання або видалення:",
-        view=HobbyCategoryView(),
-        ephemeral=True
+        view=HobbyCategoryView()
+        # Removed ephemeral=True to keep the message persistent
     )
     await interaction.followup.send(
         "Натисніть кнопку для додавання власного хобі або видалення існуючих.",
@@ -282,12 +282,24 @@ class HobbySelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         profile = get_or_create_profile(self.user_id)
         selected_hobbies = set(self.values)
-        current_hobbies = set(profile['hobbies'])
 
-        new_hobbies = selected_hobbies - current_hobbies
-        removed_hobbies = current_hobbies - selected_hobbies
+        # Hobbies in the current category
+        current_category_hobbies = set(option.label for option in self.options)
 
-        profile['hobbies'] = list(selected_hobbies)
+        # User's current hobbies
+        user_hobbies = set(profile['hobbies'])
+
+        # Hobbies from the current category that the user had previously selected
+        previous_selected_in_category = user_hobbies.intersection(current_category_hobbies)
+
+        # Hobbies to add: selected_hobbies - previous_selected_in_category
+        new_hobbies = selected_hobbies - previous_selected_in_category
+
+        # Hobbies to remove: previous_selected_in_category - selected_hobbies
+        removed_hobbies = previous_selected_in_category - selected_hobbies
+
+        # Update the user's hobbies
+        profile['hobbies'] = list((user_hobbies - removed_hobbies).union(new_hobbies))
 
         message = ""
         if new_hobbies:
@@ -373,21 +385,8 @@ class CommunicationStyleSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         profile = get_or_create_profile(self.user_id)
         selected_styles = set(self.values)
-        current_styles = set(profile['communication_styles'])
-
-        new_styles = selected_styles - current_styles
-        removed_styles = current_styles - selected_styles
-
         profile['communication_styles'] = list(selected_styles)
-
-        message = ""
-        if new_styles:
-            message += f"💬 Додано стилі спілкування: {', '.join(new_styles)}\n"
-        if removed_styles:
-            message += f"🗑️ Видалено стилі спілкування: {', '.join(removed_styles)}\n"
-        if not message:
-            message = "Ваші стилі спілкування залишилися без змін."
-
+        message = f"💬 Стилі спілкування оновлено: {', '.join(selected_styles)}"
         await interaction.response.send_message(message, ephemeral=True)
 
 # Команда для видалення профілю
